@@ -1,0 +1,664 @@
+package net.oi.gil.data;
+
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+
+import org.assertj.core.api.Assertions;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentMatchers;
+import org.mockito.Mockito;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.test.context.ActiveProfiles;
+
+import net.oi.gil.common.domain.GilVariables;
+import net.oi.gil.common.domain.Resource;
+import net.oi.gil.common.domain.ResourceState;
+import net.oi.gil.common.domain.ResourceType;
+import net.oi.gil.common.domain.profile.AuthorizationData;
+import net.oi.gil.common.domain.profile.Profile;
+import net.oi.gil.common.domain.voip.VoipNumberV1;
+import net.oi.gil.common.domain.voip.VoipRangeV1;
+import net.oi.gil.common.dtos.ActivateDto;
+import net.oi.gil.common.dtos.DeactivateDto;
+import net.oi.gil.common.dtos.ExpireDto;
+import net.oi.gil.common.dtos.InstallDto;
+import net.oi.gil.common.dtos.ReserveDto;
+import net.oi.gil.common.dtos.UninstallDto;
+import net.oi.gil.common.dtos.UnreserveDto;
+import net.oi.gil.common.enums.ResourceDocumentType;
+import net.oi.gil.common.exception.ErrorCode;
+import net.oi.gil.common.exception.InconsistentResourceStateException;
+import net.oi.gil.common.filter.voip.VoipFilter;
+import net.oi.gil.common.payload.Field;
+import net.oi.gil.common.payload.PayloadType;
+import net.oi.gil.common.payload.ProfileList;
+import net.oi.gil.common.payload.ResourceList;
+import net.oi.gil.common.payload.StringMap;
+import net.oi.gil.common.request.Operation;
+import net.oi.gil.common.request.Request;
+import net.oi.gil.common.request.StringMapRequestBuilder;
+import net.oi.gil.common.response.DataResponse;
+import net.oi.gil.common.util.voip.VoipPair;
+import net.oi.gil.common.util.voip.VoipUtil;
+import net.oi.gil.data.repository.VoipRepository;
+import net.oi.gil.data.repository.eot.VoipEotCodeRepository;
+import net.oi.gil.data.repository.mcduprefix.VoipMcduPrefixRepository;
+import net.oi.gil.data.service.voip.VoipOperations;
+import net.oi.gil.data.service.voip.VoipService;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
+
+@SpringBootTest
+@ActiveProfiles("test")
+class ServiceTests {
+  private static final SimpleDateFormat dateFormatter = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss.S");
+  private static Date fixedDate;
+
+  static {
+    try {
+      fixedDate = dateFormatter.parse("01/01/2000 01:00:00.100");
+    } catch (ParseException e) {
+    }
+  }
+
+  private VoipService service;
+
+  @MockBean
+  private VoipRepository repository;
+
+  @MockBean
+  private VoipMcduPrefixRepository voipMcduPrefixRepository;
+
+  @MockBean
+  private VoipEotCodeRepository voipEotCodeRepository;
+
+  @Autowired
+  public VoipServiceTests(VoipService service) {
+    this.service = service;
+  }
+  @Test
+  void getProfilesSuccessTest() {
+
+    Request request = createRequest("getProfiles");
+
+    List<AuthorizationData> authorizationData = new ArrayList<>();
+    Profile profile = new Profile("cadastro", authorizationData);
+
+    List<Profile> profiles = new ArrayList<>();
+    profiles.add(profile);
+    ProfileList profileList = new ProfileList(profiles);
+
+    List<String> perfis = new ArrayList<>();
+    perfis.add("cadastro");
+
+    Mockito.when(repository.findProfilesByNameFromVoipAuthorization(perfis)).thenReturn(Flux.just(profile));
+
+    DataResponse expected = new DataResponse(ErrorCode.SUCCESS, "1 objetos retornados", profileList);
+
+    StepVerifier.create(service.getProfiles(request)).consumeNextWith(r -> {
+      Assertions.assertThat(r.getCode()).isEqualTo(expected.getCode());
+      Assertions.assertThat(r.getMessage()).isEqualTo(expected.getMessage());
+      Assertions.assertThat(r.getPayload().toString()).hasToString(expected.getPayload().toString());
+    }).expectComplete().verify();
+  }
+
+
+@Test
+  void installSuccessTest() {
+    VoipRangeV1 vr = VoipUtil.createRange(ResourceState.AVAILABLE, 1, 31, 3375, 0, 9999);
+    vr.setId("123");
+
+    VoipNumberV1 vn = new VoipNumberV1(ResourceState.INSTALLED, new Date(), 1, 31, 3375, 0, "123");
+
+    Mockito.when(repository.findRandomAvailableRange(ArgumentMatchers.anyInt())).thenAnswer(i -> Mono.just(vr));
+    Mockito.when(repository.lockObject(ArgumentMatchers.anyString())).thenAnswer(i -> Mono.just(vr));
+    Mockito.when(repository.save(ArgumentMatchers.any(VoipRangeV1.class))).thenAnswer(i -> Mono.just(vr));
+    Mockito.when(repository.save(ArgumentMatchers.any(VoipNumberV1.class))).thenAnswer(i -> Mono.just(vn));
+
+    Resource resource = new Resource(ResourceType.VOIP, vn);
+    DataResponse expected = new DataResponse(ErrorCode.SUCCESS, ErrorCode.SUCCESS.getMessage(), resource);
+	  StringMap values = createValues();
+    StepVerifier.create(service.install(new InstallDto(Operation.INSTALL, values))).assertNext(r -> {
+      Assertions.assertThat(r.getCode()).isEqualTo(expected.getCode());
+      Assertions.assertThat(r.getMessage()).isEqualTo(expected.getMessage());
+      Assertions.assertThat(r.getPayload().getPayloadType()).isEqualTo(PayloadType.RESOURCE);
+      Resource irs = (Resource) r.getPayload();
+      Assertions.assertThat(irs.getType()).isEqualTo(ResourceType.VOIP);
+      Assertions.assertThat(irs.getData().getState()).isEqualTo(ResourceState.INSTALLED);
+      VoipNumberV1 ivr = (VoipNumberV1) irs.getData();
+      Assertions.assertThat(ivr.getCnl()).isEqualTo(1);
+      Assertions.assertThat(ivr.getCn()).isEqualTo(31);
+      Assertions.assertThat(ivr.getPrefix()).isEqualTo(3375);
+      Assertions.assertThat(ivr.getNumber()).isZero();
+      Assertions.assertThat(ivr.getParent()).isEqualTo("123");
+    }).expectComplete().verify();
+  }
+
+  @Test
+  void installErrorCnlNotFoundTest() {
+    Mockito.when(repository.findRandomAvailableRange(ArgumentMatchers.anyInt()))
+        .thenAnswer(i -> Mono.error(new NoSuchElementException()));
+
+    DataResponse expected =
+        new DataResponse(ErrorCode.ERR_CNL_NOT_FOUND, ErrorCode.ERR_CNL_NOT_FOUND.getMessage(), Field.from("31"));
+	  StringMap values = createValues();
+    StepVerifier.create(service.install(new InstallDto(Operation.INSTALL, values))).assertNext(r -> {
+      Assertions.assertThat(r.getCode()).isEqualTo(expected.getCode());
+      Assertions.assertThat(r.getMessage()).isEqualTo(expected.getMessage());
+      Assertions.assertThat(r.getPayload().toString()).hasToString(expected.getPayload().toString());
+    }).expectComplete().verify();
+  }
+
+  @Test
+  void installErrorOptimisticLockingFailureTest() {
+    VoipRangeV1 vr = VoipUtil.createRange(ResourceState.AVAILABLE, 1, 31, 3375, 0, 9);
+    vr.setId("123");
+
+    Mockito.when(repository.findRandomAvailableRange(ArgumentMatchers.anyInt())).thenAnswer(i -> Mono.just(vr));
+    Mockito.when(repository.lockObject(ArgumentMatchers.anyString())).thenAnswer(i -> Mono.just(vr));
+    Mockito.when(repository.save(ArgumentMatchers.any(VoipRangeV1.class)))
+        .thenThrow(new OptimisticLockingFailureException("Recurso ocupado"));
+
+    DataResponse expected =
+        new DataResponse(ErrorCode.ERR_CONCURRENT_RESOURCE_ACCESS, ErrorCode.ERR_CONCURRENT_RESOURCE_ACCESS.getMessage(),
+            Field.from("31"));
+	  StringMap values = createValues();
+    StepVerifier.create(service.install(new InstallDto(Operation.INSTALL, values))).assertNext(r -> {
+      Assertions.assertThat(r.getCode()).isEqualTo(expected.getCode());
+      Assertions.assertThat(r.getMessage()).isEqualTo(expected.getMessage());
+      Assertions.assertThat(r.getPayload().toString()).hasToString(expected.getPayload().toString());
+    }).expectComplete().verify();
+  }
+
+  @Test
+  void reserveSuccessTest() {
+    VoipRangeV1 vr = VoipUtil.createRange(ResourceState.AVAILABLE, 1, 31, 3375, 0, 9999);
+    vr.setId("123");
+
+    VoipNumberV1 vn = new VoipNumberV1(ResourceState.RESERVED, new Date(), 1, 31, 3375, 0, "123");
+
+    Mockito.when(repository.findRandomAvailableRange(ArgumentMatchers.anyInt())).thenAnswer(i -> Mono.just(vr));
+    Mockito.when(repository.lockObject(ArgumentMatchers.anyString())).thenAnswer(i -> Mono.just(vr));
+    Mockito.when(repository.save(ArgumentMatchers.any(VoipRangeV1.class))).thenAnswer(i -> Mono.just(vr));
+    Mockito.when(repository.save(ArgumentMatchers.any(VoipNumberV1.class))).thenAnswer(i -> Mono.just(vn));
+
+    Resource resource = new Resource(ResourceType.VOIP, vn);
+    DataResponse expected = new DataResponse(ErrorCode.SUCCESS, ErrorCode.SUCCESS.getMessage(), resource);
+	  StringMap values = createValues();
+    StepVerifier.create(service.reserve(new ReserveDto(Operation.RESERVE, values))).assertNext(r -> {
+      Assertions.assertThat(r.getCode()).isEqualTo(expected.getCode());
+      Assertions.assertThat(r.getMessage()).isEqualTo(expected.getMessage());
+      Assertions.assertThat(r.getPayload().getPayloadType()).isEqualTo(PayloadType.RESOURCE);
+      Resource irs = (Resource) r.getPayload();
+      Assertions.assertThat(irs.getType()).isEqualTo(ResourceType.VOIP);
+      Assertions.assertThat(irs.getData().getState()).isEqualTo(ResourceState.RESERVED);
+      VoipNumberV1 ivr = (VoipNumberV1) irs.getData();
+      Assertions.assertThat(ivr.getCnl()).isEqualTo(1);
+      Assertions.assertThat(ivr.getCn()).isEqualTo(31);
+      Assertions.assertThat(ivr.getPrefix()).isEqualTo(3375);
+      Assertions.assertThat(ivr.getNumber()).isZero();
+      Assertions.assertThat(ivr.getParent()).isEqualTo("123");
+    }).expectComplete().verify();
+  }
+
+  @Test
+  void uninstallSuccessTest() {
+    VoipRangeV1 vr = VoipUtil.createRange(ResourceState.AVAILABLE, 1, 31, 3375, 0, 9999);
+    vr.setId("123");
+    VoipPair vp = VoipOperations.popNumber(vr, ResourceState.INSTALLED, null);
+    VoipRangeV1 vrBefore = vp.getVr();
+    VoipNumberV1 vnBefore = vp.getVn();
+    vnBefore.setId("1");
+    vnBefore.setStateChangeDate(fixedDate);
+
+    VoipRangeV1 vrAfter = VoipUtil.createRange(ResourceState.AVAILABLE, 1, 31, 3375, 0, 9999);
+    vr.setId("123");
+    VoipNumberV1 vnAfter = VoipUtil.createNumber(ResourceState.AVAILABLE, 1, 31, 3375, 0);
+    vnAfter.setId("1");
+    vnAfter.setParent("123");
+    vnAfter.setStateChangeDate(fixedDate);
+
+    Mockito.when(repository.findNumberByCnAndPrefixAndNumber(ArgumentMatchers.anyInt(), ArgumentMatchers.anyInt(),
+        ArgumentMatchers.anyInt())).thenAnswer(i -> Mono.just(vnBefore));
+    Mockito.when(repository.lockObject(ArgumentMatchers.matches("^1$"))).thenAnswer(i -> Mono.just(vnBefore));
+    Mockito.when(repository.lockObject(ArgumentMatchers.matches("^123$"))).thenAnswer(i -> Mono.just(vrBefore));
+    Mockito.when(repository.save(ArgumentMatchers.any(VoipRangeV1.class))).thenAnswer(i -> Mono.just(vrAfter));
+    Mockito.when(repository.delete(ArgumentMatchers.any(VoipNumberV1.class))).thenAnswer(i -> Mono.empty().then());
+
+    Resource resource = new Resource(ResourceType.VOIP, vnAfter);
+    DataResponse expected = new DataResponse(ErrorCode.SUCCESS, ErrorCode.SUCCESS.getMessage(), resource);
+	  StringMap values = createValues();
+	  StepVerifier.create(service.uninstall(new UninstallDto(Operation.UNINSTALL, values))).assertNext(r -> {
+	      Assertions.assertThat(r.getCode()).isEqualTo(expected.getCode());
+	      Assertions.assertThat(r.getMessage()).isEqualTo(expected.getMessage());
+	      Assertions.assertThat(r.getPayload().getPayloadType()).isEqualTo(PayloadType.RESOURCE);
+	      Resource irs = (Resource) r.getPayload();
+	      Assertions.assertThat(irs.getType()).isEqualTo(ResourceType.VOIP);
+	      Assertions.assertThat(irs.getData().getState()).isEqualTo(ResourceState.AVAILABLE);
+	      VoipRangeV1 ivr = (VoipRangeV1) irs.getData();
+	      Assertions.assertThat(ivr.getCnl()).isEqualTo(1);
+	      Assertions.assertThat(ivr.getCn()).isEqualTo(31);
+	      Assertions.assertThat(ivr.getPrefix()).isEqualTo(3375);
+	      Assertions.assertThat(ivr.getStart()).isZero();
+	      Assertions.assertThat(ivr.getEnd()).isEqualTo(9999);
+	    }).expectComplete().verify();
+  }
+
+  @Test
+  void uninstallErrorInconsistentResourceStateTest() {
+    VoipNumberV1 vn = new VoipNumberV1(ResourceState.AVAILABLE, new Date(), 1, 31, 3375, 0, "123");
+    vn.setId("1");
+
+    Mockito.when(repository.findNumberByCnAndPrefixAndNumber(ArgumentMatchers.anyInt(), ArgumentMatchers.anyInt(),
+        ArgumentMatchers.anyInt())).thenAnswer(i -> Mono.just(vn));
+    Mockito.when(repository.lockObject(ArgumentMatchers.matches("^1$"))).thenAnswer(i -> Mono.just(vn));
+
+    InconsistentResourceStateException e =
+        new InconsistentResourceStateException(Operation.UNINSTALL, ResourceState.AVAILABLE, ResourceState.INSTALLED);
+    DataResponse expected = new DataResponse(e.getCode(), e.getMessage(), Field.from("3133750000"));
+	  StringMap values = createValues();
+  StepVerifier.create(service.uninstall(new UninstallDto(Operation.UNINSTALL, values))).assertNext(r -> {
+      Assertions.assertThat(r.getCode()).isEqualTo(expected.getCode());
+      Assertions.assertThat(r.getMessage()).isEqualTo(expected.getMessage());
+      Assertions.assertThat(r.getPayload().toString()).hasToString(expected.getPayload().toString());
+    }).expectComplete().verify();
+  }
+
+  @Test
+  void uninstallErrorUndefinedParameterTest() {
+    VoipRangeV1 vr = VoipUtil.createRange(ResourceState.AVAILABLE, 1, 31, 3375, 0, 9999);
+    vr.setId("123");
+    VoipPair vp = VoipOperations.popNumber(vr, ResourceState.INSTALLED, null);
+    vr = vp.getVr();
+
+    VoipNumberV1 vn = new VoipNumberV1(ResourceState.INSTALLED, new Date(), 1, 31, 3375, 0, null);
+    vn.setId("1");
+
+    Mockito.when(repository.findNumberByCnAndPrefixAndNumber(ArgumentMatchers.anyInt(), ArgumentMatchers.anyInt(),
+        ArgumentMatchers.anyInt())).thenAnswer(i -> Mono.just(vn));
+    Mockito.when(repository.lockObject(ArgumentMatchers.matches("^1$"))).thenAnswer(i -> Mono.just(vn));
+
+    DataResponse expected =
+        new DataResponse(ErrorCode.ERR_UNDEFINED_PARENT, ErrorCode.ERR_UNDEFINED_PARENT.getMessage(), Field.from("3133750000"));
+	  StringMap values = createValues();
+
+	  StepVerifier.create(service.uninstall(new UninstallDto(Operation.UNINSTALL, values))).assertNext(r -> {
+      Assertions.assertThat(r.getCode()).isEqualTo(expected.getCode());
+      Assertions.assertThat(r.getMessage()).isEqualTo(expected.getMessage());
+      Assertions.assertThat(r.getPayload().toString()).hasToString(expected.getPayload().toString());
+    }).expectComplete().verify();
+  }
+
+  @Test
+  void uninstallErrorNumberNotFoundTest() {
+    Mockito.when(repository.findNumberByCnAndPrefixAndNumber(ArgumentMatchers.anyInt(), ArgumentMatchers.anyInt(),
+        ArgumentMatchers.anyInt())).thenAnswer(i -> Mono.error(new NoSuchElementException()));
+
+    DataResponse expected =
+        new DataResponse(ErrorCode.ERR_NUMBER_NOT_FOUND, ErrorCode.ERR_NUMBER_NOT_FOUND.getMessage(), Field.from("3133750000"));
+	  StringMap values = createValues();
+	  StepVerifier.create(service.uninstall(new UninstallDto(Operation.UNINSTALL, values))).assertNext(r -> {
+      Assertions.assertThat(r.getCode()).isEqualTo(expected.getCode());
+      Assertions.assertThat(r.getMessage()).isEqualTo(expected.getMessage());
+      Assertions.assertThat(r.getPayload().toString()).hasToString(expected.getPayload().toString());
+    }).expectComplete().verify();
+  }
+
+  @Test
+  void uninstallErrorOptimisticLockingFailureTest() {
+    VoipRangeV1 vr = VoipUtil.createRange(ResourceState.AVAILABLE, 1, 31, 3375, 0, 9999);
+    vr.setId("123");
+    VoipPair vp = VoipOperations.popNumber(vr, ResourceState.INSTALLED, null);
+    VoipRangeV1 vr2 = vp.getVr();
+    VoipNumberV1 vn = vp.getVn();
+    vn.setId("1");
+
+    Mockito.when(repository.findNumberByCnAndPrefixAndNumber(ArgumentMatchers.anyInt(), ArgumentMatchers.anyInt(),
+        ArgumentMatchers.anyInt())).thenAnswer(i -> Mono.just(vn));
+    Mockito.when(repository.lockObject(ArgumentMatchers.matches("^1$"))).thenAnswer(i -> Mono.just(vn));
+    Mockito.when(repository.lockObject(ArgumentMatchers.matches("^123$"))).thenAnswer(i -> Mono.just(vr2));
+    Mockito.when(repository.save(ArgumentMatchers.any(VoipRangeV1.class)))
+        .thenThrow(new OptimisticLockingFailureException("Recurso ocupado"));
+
+    DataResponse expected =
+        new DataResponse(ErrorCode.ERR_CONCURRENT_RESOURCE_ACCESS, ErrorCode.ERR_CONCURRENT_RESOURCE_ACCESS.getMessage(),
+            Field.from("3133750000"));
+	  StringMap values = createValues();
+
+	  StepVerifier.create(service.uninstall(new UninstallDto(Operation.UNINSTALL, values))).assertNext(r -> {
+      Assertions.assertThat(r.getCode()).isEqualTo(expected.getCode());
+      Assertions.assertThat(r.getMessage()).isEqualTo(expected.getMessage());
+      Assertions.assertThat(r.getPayload().toString()).hasToString(expected.getPayload().toString());
+    }).expectComplete().verify();
+  }
+
+  @Test
+  void unreserveErrorInconsistentResourceStateTest() {
+    VoipNumberV1 vn = new VoipNumberV1(ResourceState.AVAILABLE, new Date(), 1, 31, 3375, 0, "123");
+    vn.setId("1");
+
+    Mockito.when(repository.findNumberByCnAndPrefixAndNumber(ArgumentMatchers.anyInt(), ArgumentMatchers.anyInt(),
+        ArgumentMatchers.anyInt())).thenAnswer(i -> Mono.just(vn));
+    Mockito.when(repository.lockObject(ArgumentMatchers.matches("^1$"))).thenAnswer(i -> Mono.just(vn));
+
+    InconsistentResourceStateException e =
+        new InconsistentResourceStateException(Operation.UNRESERVE, ResourceState.AVAILABLE, ResourceState.RESERVED);
+    DataResponse expected = new DataResponse(e.getCode(), e.getMessage(), Field.from("3133750000"));
+	  StringMap values = createValues();
+	  StepVerifier.create(service.unreserve(new UnreserveDto(Operation.UNRESERVE, values))).assertNext(r -> {
+      Assertions.assertThat(r.getCode()).isEqualTo(expected.getCode());
+      Assertions.assertThat(r.getMessage()).isEqualTo(expected.getMessage());
+      Assertions.assertThat(r.getPayload().toString()).hasToString(expected.getPayload().toString());
+    }).expectComplete().verify();
+  }
+
+  @Test
+  void activateSuccessTest() {
+    VoipRangeV1 vr = VoipUtil.createRange(ResourceState.AVAILABLE, 1, 31, 3375, 0, 999);
+    VoipPair vp = VoipOperations.popNumber(vr, ResourceState.RESERVED, null);
+    vp.getVn().setId("1");
+    vp.getVn().setParent("123");
+
+    VoipPair vpAfter = VoipOperations.changeState(vp.getVr(), vp.getVn(), ResourceState.INSTALLED, null);
+    vpAfter.getVn().setId("1");
+    vpAfter.getVn().setParent("123");
+
+    Mockito.when(repository.findNumberByCnAndPrefixAndNumber(ArgumentMatchers.anyInt(), ArgumentMatchers.anyInt(),
+        ArgumentMatchers.anyInt())).thenAnswer(i -> Mono.just(vp.getVn()));
+    Mockito.when(repository.lockObject(ArgumentMatchers.matches("^1$"))).thenAnswer(i -> Mono.just(vp.getVn()));
+    Mockito.when(repository.lockObject(ArgumentMatchers.matches("^123$"))).thenAnswer(i -> Mono.just(vp.getVr()));
+    Mockito.when(repository.save(ArgumentMatchers.any(VoipRangeV1.class))).thenAnswer(i -> Mono.just(vpAfter.getVr()));
+    Mockito.when(repository.save(ArgumentMatchers.any(VoipNumberV1.class))).thenAnswer(i -> Mono.just(vpAfter.getVn()));
+
+    Resource resource = new Resource(ResourceType.VOIP, vpAfter.getVn());
+    DataResponse expected = new DataResponse(ErrorCode.SUCCESS, ErrorCode.SUCCESS.getMessage(), resource);
+	  StringMap values = createValues();
+	  StepVerifier.create(service.activate(new ActivateDto(Operation.ACTIVATE, values))).assertNext(r -> {
+      Assertions.assertThat(r.getCode()).isEqualTo(expected.getCode());
+      Assertions.assertThat(r.getMessage()).isEqualTo(expected.getMessage());
+      Assertions.assertThat(r.getPayload().getPayloadType()).isEqualTo(PayloadType.RESOURCE);
+      Resource irs = (Resource) r.getPayload();
+      Assertions.assertThat(irs.getType()).isEqualTo(ResourceType.VOIP);
+      Assertions.assertThat(irs.getData().getState()).isEqualTo(ResourceState.INSTALLED);
+      VoipNumberV1 ivr = (VoipNumberV1) irs.getData();
+      Assertions.assertThat(ivr.getCnl()).isEqualTo(1);
+      Assertions.assertThat(ivr.getCn()).isEqualTo(31);
+      Assertions.assertThat(ivr.getPrefix()).isEqualTo(3375);
+      Assertions.assertThat(ivr.getNumber()).isZero();
+      Assertions.assertThat(ivr.getParent()).isEqualTo("123");
+    }).expectComplete().verify();
+  }
+
+  @Test
+  void activateErrorInconsistentResourceStateTest() {
+    VoipNumberV1 vn = new VoipNumberV1(ResourceState.AVAILABLE, new Date(), 1, 31, 3375, 0, "123");
+    vn.setId("1");
+
+    Mockito.when(repository.findNumberByCnAndPrefixAndNumber(ArgumentMatchers.anyInt(), ArgumentMatchers.anyInt(),
+        ArgumentMatchers.anyInt())).thenAnswer(i -> Mono.just(vn));
+    Mockito.when(repository.lockObject(ArgumentMatchers.matches("^1$"))).thenAnswer(i -> Mono.just(vn));
+
+    InconsistentResourceStateException e =
+        new InconsistentResourceStateException(Operation.ACTIVATE, ResourceState.AVAILABLE, ResourceState.RESERVED);
+    DataResponse expected = new DataResponse(e.getCode(), e.getMessage(), Field.from("3133750000"));
+	  StringMap values = createValues();
+	  StepVerifier.create(service.activate(new ActivateDto(Operation.ACTIVATE, values))).assertNext(r -> {
+      Assertions.assertThat(r.getCode()).isEqualTo(expected.getCode());
+      Assertions.assertThat(r.getMessage()).isEqualTo(expected.getMessage());
+      Assertions.assertThat(r.getPayload().toString()).hasToString(expected.getPayload().toString());
+    }).expectComplete().verify();
+  }
+
+  @Test
+  void deactivateSuccessTest() {
+    VoipRangeV1 vr = VoipUtil.createRange(ResourceState.AVAILABLE, 1, 31, 3375, 0, 999);
+    vr.setId("123");
+
+    VoipPair vp = VoipOperations.popNumber(vr, ResourceState.INSTALLED, null);
+    vp.getVn().setId("1");
+    vp.getVn().setParent("123");
+
+    VoipPair vpAfter = VoipOperations.changeState(vp.getVr(), vp.getVn(), ResourceState.QUARANTINE, null);
+    vpAfter.getVn().setId("1");
+    vpAfter.getVn().setParent("123");
+
+    Mockito.when(repository.findNumberByCnAndPrefixAndNumber(ArgumentMatchers.anyInt(), ArgumentMatchers.anyInt(),
+        ArgumentMatchers.anyInt())).thenAnswer(i -> Mono.just(vp.getVn()));
+    Mockito.when(repository.lockObject(ArgumentMatchers.matches("^1$"))).thenAnswer(i -> Mono.just(vp.getVn()));
+    Mockito.when(repository.lockObject(ArgumentMatchers.matches("^123$"))).thenAnswer(i -> Mono.just(vp.getVr()));
+    Mockito.when(repository.save(ArgumentMatchers.any(VoipRangeV1.class))).thenAnswer(i -> Mono.just(vpAfter.getVr()));
+    Mockito.when(repository.save(ArgumentMatchers.any(VoipNumberV1.class))).thenAnswer(i -> Mono.just(vpAfter.getVn()));
+
+    Resource resource = new Resource(ResourceType.VOIP, vpAfter.getVn());
+    DataResponse expected = new DataResponse(ErrorCode.SUCCESS, ErrorCode.SUCCESS.getMessage(), resource);
+	  StringMap values = createValues();
+	  StepVerifier.create(service.deactivate(new DeactivateDto(Operation.DEACTIVATE, values))).assertNext(r -> {
+      Assertions.assertThat(r.getCode()).isEqualTo(expected.getCode());
+      Assertions.assertThat(r.getMessage()).isEqualTo(expected.getMessage());
+      Assertions.assertThat(r.getPayload().getPayloadType()).isEqualTo(PayloadType.RESOURCE);
+      Resource irs = (Resource) r.getPayload();
+      Assertions.assertThat(irs.getType()).isEqualTo(ResourceType.VOIP);
+      Assertions.assertThat(irs.getData().getState()).isEqualTo(ResourceState.QUARANTINE);
+      VoipNumberV1 ivr = (VoipNumberV1) irs.getData();
+      Assertions.assertThat(ivr.getCnl()).isEqualTo(1);
+      Assertions.assertThat(ivr.getCn()).isEqualTo(31);
+      Assertions.assertThat(ivr.getPrefix()).isEqualTo(3375);
+      Assertions.assertThat(ivr.getNumber()).isZero();
+      Assertions.assertThat(ivr.getParent()).isEqualTo("123");
+    }).expectComplete().verify();
+  }
+
+  @Test
+  void deactivateErrorInconsistentResourceStateTest() {
+    VoipNumberV1 vn =
+        new VoipNumberV1(ResourceState.AVAILABLE, new Date(), 1, 31, 3375, 0, "123", ResourceDocumentType.CPF, "23468795847",
+            "Fulano de Tal",null, null, null, null, null);
+    vn.setId("1");
+
+    Mockito.when(repository.findNumberByCnAndPrefixAndNumber(ArgumentMatchers.anyInt(), ArgumentMatchers.anyInt(),
+        ArgumentMatchers.anyInt())).thenAnswer(i -> Mono.just(vn));
+    Mockito.when(repository.lockObject(ArgumentMatchers.matches("^1$"))).thenAnswer(i -> Mono.just(vn));
+
+    InconsistentResourceStateException e = new InconsistentResourceStateException(Operation.DEACTIVATE, ResourceState.AVAILABLE, ResourceState.INSTALLED);
+      DataResponse expected = new DataResponse(e.getCode(), e.getMessage(), Field.from("3133750000"));
+	  StringMap values = createValues();
+	  
+	  
+	  StepVerifier.create(service.deactivate(new DeactivateDto(Operation.DEACTIVATE, values))).assertNext(r -> {
+	      Assertions.assertThat(r.getCode()).isEqualTo(expected.getCode());
+	      Assertions.assertThat(r.getMessage().toString()).hasToString(expected.getMessage().toString());
+	      Assertions.assertThat(r.getPayload().toString()).hasToString(expected.getPayload().toString());
+    }).expectComplete().verify();
+  }
+
+
+  @Test
+  void expireSuccessTest() {
+    VoipRangeV1 vr1 = VoipUtil.createRange(ResourceState.AVAILABLE, 1, 11, 1111, 1, 10);
+    vr1.setId("123");
+    VoipPair vp = VoipOperations.popNumber(vr1, ResourceState.INSTALLED, null);
+    VoipRangeV1 vr12 = vp.getVr();
+    VoipNumberV1 vn1 = vp.getVn();
+    vn1.setId("1");
+
+    VoipRangeV1 vr2 = VoipUtil.createRange(ResourceState.AVAILABLE, 2, 22, 2222, 1, 10);
+    vr2.setId("456");
+    vp = VoipOperations.popNumber(vr2, ResourceState.INSTALLED, null);
+    VoipRangeV1 vr22 = vp.getVr();
+    VoipNumberV1 vn2 = vp.getVn();
+    vn2.setId("4");
+
+    vp = VoipOperations.popNumber(vr12, ResourceState.INSTALLED, null);
+    VoipRangeV1 vr13 = vp.getVr();
+    VoipNumberV1 vn3 = vp.getVn();
+    vn3.setId("6");
+
+    VoipRangeV1 vr1After = VoipUtil.createRange(ResourceState.AVAILABLE, 1, 11, 1111, 1, 10);
+    vr1After.setId("123");
+
+    VoipRangeV1 vr2After = VoipUtil.createRange(ResourceState.AVAILABLE, 2, 22, 2222, 1, 10);
+    vr2After.setId("456");
+
+    VoipRangeV1 vr1After2 = VoipUtil.createRange(ResourceState.AVAILABLE, 1, 11, 1111, 1, 10);
+    vr1After2.setId("123");
+
+    Mockito.when(repository.findNumbersByStateAndStateChangeDateLessThan(ArgumentMatchers.any(ResourceState.class),
+        ArgumentMatchers.anyInt())).thenAnswer(i -> Flux.just(vn1, vn2, vn3));
+    Mockito.when(repository.lockObject(ArgumentMatchers.matches("^1$"))).thenAnswer(i -> Mono.just(vn1));
+    Mockito.when(repository.lockObject(ArgumentMatchers.matches("^4$"))).thenAnswer(i -> Mono.just(vn2));
+    Mockito.when(repository.lockObject(ArgumentMatchers.matches("^6$"))).thenAnswer(i -> Mono.just(vn3));
+    Mockito.when(repository.lockObject(ArgumentMatchers.matches("^123$")))
+        .thenAnswer(i -> Mono.just(vr13))
+        .thenAnswer(i -> Mono.just(vr1After));
+    Mockito.when(repository.lockObject(ArgumentMatchers.matches("^456$"))).thenAnswer(i -> Mono.just(vr22));
+    Mockito.when(repository.save(ArgumentMatchers.any(VoipRangeV1.class)))
+        .thenAnswer(i -> Mono.just(vr1After))
+        .thenAnswer(i -> Mono.just(vr2After))
+        .thenAnswer(i -> Mono.just(vr1After2));
+    Mockito.when(repository.delete(ArgumentMatchers.any(VoipNumberV1.class))).thenAnswer(i -> Mono.empty().then());
+
+    String message =
+        "Sucesso" + System.lineSeparator() + "[1]: Sucesso (1111110001)" + System.lineSeparator() + "[2]: Sucesso (2222220001)"
+            + System.lineSeparator() + "[3]: Sucesso (1111110002)";
+    DataResponse expected = new DataResponse(ErrorCode.SUCCESS, message, null);
+	  StringMap values = createValues();
+
+	  StepVerifier.create(service.expire(new ExpireDto(values))).assertNext(r -> {
+      Assertions.assertThat(r.getCode()).isEqualTo(expected.getCode());
+      Assertions.assertThat(r.getMessage()).isEqualTo(expected.getMessage());
+      Assertions.assertThat(r.getPayload()).isNull();
+    }).expectComplete().verify();
+  }
+
+  @Test
+  void expireErrorUndefinedParentTest() {
+    VoipNumberV1 vn1 = new VoipNumberV1(ResourceState.RESERVED, new Date(), 1, 11, 1111, 1, null);
+    vn1.setId("1");
+
+    Mockito.when(repository.findNumbersByStateAndStateChangeDateLessThan(ArgumentMatchers.any(ResourceState.class),
+        ArgumentMatchers.anyInt())).thenAnswer(i -> Flux.just(vn1));
+    Mockito.when(repository.lockObject(ArgumentMatchers.matches("^1$"))).thenAnswer(i -> Mono.just(vn1));
+
+    String message = "Erro generico" + System.lineSeparator() + "[1]: Numero nao possui range associado (1111110001)";
+    DataResponse expected = new DataResponse(ErrorCode.ERR_GENERIC, message, null);
+	  StringMap values = createValues();
+
+	  StepVerifier.create(service.expire(new ExpireDto(values))).assertNext(r -> {
+      Assertions.assertThat(r.getCode()).isEqualTo(expected.getCode());
+      Assertions.assertThat(r.getMessage()).isEqualTo(expected.getMessage());
+      Assertions.assertThat(r.getPayload()).isNull();
+    }).expectComplete().verify();
+  }
+
+  @Test
+  void expireErrorOptimisticLockingFailureTest() {
+    VoipRangeV1 vr1 = VoipUtil.createRange(ResourceState.AVAILABLE, 1, 11, 1111, 1, 10);
+    vr1.setId("123");
+    VoipPair vp = VoipOperations.popNumber(vr1, ResourceState.INSTALLED, null);
+    VoipRangeV1 vr12 = vp.getVr();
+    VoipNumberV1 vn1 = vp.getVn();
+    vn1.setId("1");
+
+    VoipRangeV1 vr2 = VoipUtil.createRange(ResourceState.AVAILABLE, 2, 22, 2222, 1, 10);
+    vr2.setId("456");
+    vp = VoipOperations.popNumber(vr2, ResourceState.INSTALLED, null);
+    VoipRangeV1 vr22 = vp.getVr();
+    VoipNumberV1 vn2 = vp.getVn();
+    vn2.setId("4");
+
+    VoipRangeV1 vr2After = VoipUtil.createRange(ResourceState.AVAILABLE, 2, 22, 2222, 1, 10);
+    vr2After.setId("456");
+
+    Mockito.when(repository.findNumbersByStateAndStateChangeDateLessThan(ArgumentMatchers.any(ResourceState.class),
+        ArgumentMatchers.anyInt())).thenAnswer(i -> Flux.just(vn1, vn2));
+    Mockito.when(repository.lockObject(ArgumentMatchers.matches("^1$"))).thenAnswer(i -> Mono.just(vn1));
+    Mockito.when(repository.lockObject(ArgumentMatchers.matches("^4$"))).thenAnswer(i -> Mono.just(vn2));
+    Mockito.when(repository.lockObject(ArgumentMatchers.matches("^123$"))).thenAnswer(i -> Mono.just(vr12));
+    Mockito.when(repository.lockObject(ArgumentMatchers.matches("^456$"))).thenAnswer(i -> Mono.just(vr22));
+    Mockito.when(repository.save(ArgumentMatchers.any(VoipRangeV1.class)))
+        .thenThrow(new OptimisticLockingFailureException("Recurso ocupado"))
+        .thenThrow(new OptimisticLockingFailureException("Recurso ocupado"))
+        .thenThrow(new OptimisticLockingFailureException("Recurso ocupado"))
+        .thenThrow(new OptimisticLockingFailureException("Recurso ocupado"))
+        .thenAnswer(i -> Mono.just(vr2After));
+    Mockito.when(repository.delete(ArgumentMatchers.any(VoipNumberV1.class))).thenAnswer(i -> Mono.empty().then());
+
+    String message =
+        "Sucesso parcial" + System.lineSeparator() + "[1]: Acesso concorrente a recurso (1111110001)" + System.lineSeparator()
+            + "[2]: Sucesso (2222220001)";
+    DataResponse expected = new DataResponse(ErrorCode.PARTIAL_SUCCESS, message, null);
+	  StringMap values = createValues();
+	  StepVerifier.create(service.expire(new ExpireDto(values))).assertNext(r -> {
+	      Assertions.assertThat(r.getCode()).isEqualTo(expected.getCode());
+	      Assertions.assertThat(r.getMessage()).isEqualTo(expected.getMessage());
+	      Assertions.assertThat(r.getPayload()).isNull();
+    }).expectComplete().verify();
+  }
+
+  void unreserveSuccessTest() {
+    VoipNumberV1 vn = new VoipNumberV1(ResourceState.RESERVED, new Date(), 1, 31, 3375, 0, "123");
+    vn.setId("1");
+
+    VoipNumberV1 vnAfter = new VoipNumberV1(ResourceState.AVAILABLE, new Date(), 1, 31, 3375, 0, "123");
+    vn.setId("1");
+
+    Mockito.when(repository.findNumberByCnAndPrefixAndNumber(ArgumentMatchers.anyInt(), ArgumentMatchers.anyInt(),
+        ArgumentMatchers.anyInt())).thenAnswer(i -> Mono.just(vn));
+    Mockito.when(repository.lockObject(ArgumentMatchers.matches("^1$"))).thenAnswer(i -> Mono.just(vn));
+    Mockito.when(repository.save(ArgumentMatchers.any(VoipNumberV1.class))).thenAnswer(i -> Mono.just(vnAfter));
+    Mockito.when(repository.delete(ArgumentMatchers.any(VoipNumberV1.class))).thenAnswer(i -> Mono.empty().then());
+
+    Resource resource = new Resource(ResourceType.VOIP, vnAfter);
+    DataResponse expected = new DataResponse(ErrorCode.SUCCESS, ErrorCode.SUCCESS.getMessage(), resource);
+	  StringMap values = createValues();
+
+	  StepVerifier.create(service.unreserve(new UnreserveDto(Operation.UNRESERVE, values))).assertNext(r -> {
+      Assertions.assertThat(r.toString()).hasToString(expected.toString());
+    }).expectComplete().verify();
+  }
+  
+  private StringMap createValues() {
+	  StringMap values = new StringMap();
+	  values.addEntry("cn", "31");
+	  values.addEntry("cnl", "31");
+	  values.addEntry("prefix", "3375");
+	  values.addEntry("number", "0");
+	  values.addEntry("idGpon", null);
+	  values.addEntry("documentType", "cpf");
+	  values.addEntry("documentNumber", "23468795847");
+	  values.addEntry("clientName", GilVariables.CURRENT_USER);
+	  values.addEntry("state", "reserved");
+	  values.addEntry("days", "180");
+	  values.addEntry("responsibleUser", GilVariables.CURRENT_USER);
+	  return values;
+  }
+
+  private Request createRequest(String operation) {
+	    Map<String, String> requestMap = new HashMap<>();
+	    requestMap.put("type", "voip");
+	    requestMap.put("operation", operation);
+	    requestMap.put("profiles", "cadastro");
+	    requestMap.put("operation", "find");
+	    requestMap.put("cn", "31");
+	    requestMap.put("number", "12345678");
+	    requestMap.put("cnList", "63");
+	    requestMap.put("cnlList", "12");
+	    try {
+	      return StringMapRequestBuilder.fromMap(requestMap).build();
+	    } catch (Exception e) {
+	      Assertions.assertThat(Boolean.FALSE).isTrue();
+	      return null;
+	    }
+  }
+  
+}
