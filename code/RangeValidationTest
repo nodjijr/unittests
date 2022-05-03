@@ -1,0 +1,208 @@
+package com.arthuro.data.service.mcduprefix.process;
+
+import java.util.Objects;
+
+import org.assertj.core.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.Mockito;
+import org.mockito.MockitoAnnotations;
+
+import net.oi.gil.common.domain.GilVariables;
+import net.oi.gil.common.domain.mcduprefix.RangeAggregateResult;
+import net.oi.gil.common.dtos.McduPrefixRangeValidationDto;
+import net.oi.gil.common.exception.ErrorCode;
+import net.oi.gil.common.payload.StringMap;
+import net.oi.gil.common.request.Operation;
+import net.oi.gil.data.repository.mcduprefix.VoipMcduPrefixRepository;
+import net.oi.gil.data.repository.stfc.VoipStfcRepository;
+import reactor.core.publisher.Flux;
+import reactor.test.StepVerifier;
+
+class RangeValidationTest {
+	
+	@InjectMocks
+	private RangeValidation service;
+	@Mock
+	private VoipMcduPrefixRepository mcduPrefixRepository;
+	@Mock
+	private VoipStfcRepository stfcRepository;	
+	
+	@BeforeEach
+    void setUp() {
+        MockitoAnnotations.openMocks(this);
+    }
+
+	@Test
+	void executeTest() {
+		StringMap stringMap = new StringMap();
+        stringMap.addEntry("validationDate", "2022-02-16");
+		McduPrefixRangeValidationDto dto = new McduPrefixRangeValidationDto(Operation.MCDU_PREFIX_RANGE_VALIDATION, stringMap);
+		
+		
+		RangeAggregateResult rangeAggregate = new RangeAggregateResult();
+		rangeAggregate.setCn(11);
+		rangeAggregate.setPrefix(1245);
+		rangeAggregate.setQuantityRangeMcduPrefix(0);
+		rangeAggregate.setQuantityRangeStfc(0);
+		rangeAggregate.setResult(Boolean.FALSE);
+        Mockito.when(mcduPrefixRepository.getMcdPrefixProviderNotExistsInStfcName()).thenReturn(Flux.just(rangeAggregate));
+        Mockito.when(mcduPrefixRepository.getMcdPrefixLocaleCodeNotExistsInStfcLocalAreaCode()).thenReturn(Flux.just(rangeAggregate));
+        Mockito.when(mcduPrefixRepository.getQuantityRangeByGroupCnPrefix()).thenReturn(Flux.just(rangeAggregate));
+        Mockito.when(stfcRepository.getStfcNotExistsInMcdPrefix()).thenReturn(Flux.just(rangeAggregate));
+        Mockito.when(mcduPrefixRepository.getMcdPrefixNotExistsInStfc()).thenReturn(Flux.just(rangeAggregate));
+        StepVerifier.create(service.execute(dto)).consumeNextWith(result -> {
+            Assertions.assertThat(result.getCode()).isEqualTo(ErrorCode.SUCCESS);
+            Assertions.assertThat(result.getMessage()).isEqualTo(ErrorCode.SUCCESS.getMessage());
+          }).expectComplete().verify();
+	}
+	
+	
+	@Test
+	void getMcdPrefixProviderNotExistsInStfcNameWithExistingReturn() {
+		RangeAggregateResult rangeAggregate = new RangeAggregateResult();
+		rangeAggregate.setCn(11);
+		rangeAggregate.setPrefix(1245);
+		rangeAggregate.setQuantityRangeMcduPrefix(0);
+		rangeAggregate.setQuantityRangeStfc(0);
+		rangeAggregate.setResult(Boolean.FALSE);
+        Mockito.when(mcduPrefixRepository.getMcdPrefixProviderNotExistsInStfcName()).thenReturn(Flux.just(rangeAggregate));
+        StepVerifier.create(service.getMcdPrefixProviderNotExistsInStfcName()).consumeNextWith(result -> {
+            Assertions.assertThat(result.getCn()).isEqualTo(rangeAggregate.getCn());
+            Assertions.assertThat(result.getPrefix()).isEqualTo(rangeAggregate.getPrefix());
+            Assertions.assertThat(result.getMessage()).isEqualTo(GilVariables.DIVERGENT_PROVIDER_BETWEEN_MCDU_PREFIX_AND_STFS);
+          }).expectComplete().verify();
+	}
+	
+	@Test
+	void getMcdPrefixProviderNotExistsInStfcNameWithNotExistingReturn() {
+		RangeAggregateResult rangeAggregate = new RangeAggregateResult();
+		rangeAggregate.setCn(11);
+		rangeAggregate.setPrefix(1245);
+		rangeAggregate.setQuantityRangeMcduPrefix(0);
+		rangeAggregate.setQuantityRangeStfc(0);
+		rangeAggregate.setResult(Boolean.TRUE);
+        Mockito.when(mcduPrefixRepository.getMcdPrefixProviderNotExistsInStfcName()).thenReturn(Flux.just(rangeAggregate));
+        Assertions.assertThat(Objects.isNull(service.getMcdPrefixProviderNotExistsInStfcName())).isFalse();
+	}
+	
+	
+	@Test
+	void getMcdPrefixLocaleCodeNotExistsInStfcLocalAreaCodeWithExistingReturn() {
+		RangeAggregateResult rangeAggregate = new RangeAggregateResult();
+		rangeAggregate.setCn(11);
+		rangeAggregate.setPrefix(1245);
+		rangeAggregate.setQuantityRangeMcduPrefix(0);
+		rangeAggregate.setQuantityRangeStfc(0);
+		rangeAggregate.setResult(Boolean.FALSE);
+        Mockito.when(mcduPrefixRepository.getMcdPrefixLocaleCodeNotExistsInStfcLocalAreaCode()).thenReturn(Flux.just(rangeAggregate));
+        StepVerifier.create(service.getMcdPrefixLocaleCodeNotExistsInStfcLocalAreaCode()).consumeNextWith(result -> {
+            Assertions.assertThat(result.getCn()).isEqualTo(rangeAggregate.getCn());
+            Assertions.assertThat(result.getPrefix()).isEqualTo(rangeAggregate.getPrefix());
+            Assertions.assertThat(result.getMessage()).isEqualTo(GilVariables.DIVERGENT_LOCAL_AREA_BETWEEN_MCDU_PREFIX_AND_STFS);
+          }).expectComplete().verify();
+	}
+	
+	@Test
+	void getMcdPrefixLocaleCodeNotExistsInStfcLocalAreaCodeWithNotExistingReturn() {
+		RangeAggregateResult rangeAggregate = new RangeAggregateResult();
+		rangeAggregate.setCn(11);
+		rangeAggregate.setPrefix(1245);
+		rangeAggregate.setQuantityRangeMcduPrefix(0);
+		rangeAggregate.setQuantityRangeStfc(0);
+		rangeAggregate.setResult(Boolean.TRUE);
+        Mockito.when(mcduPrefixRepository.getMcdPrefixLocaleCodeNotExistsInStfcLocalAreaCode()).thenReturn(Flux.just(rangeAggregate));
+        Assertions.assertThat(Objects.isNull(service.getMcdPrefixLocaleCodeNotExistsInStfcLocalAreaCode())).isFalse();
+	}
+	
+	
+	
+	@Test
+	void getQuantityRangeByGroupCnPrefixWithExistingReturn() {
+		RangeAggregateResult rangeAggregate = new RangeAggregateResult();
+		rangeAggregate.setCn(11);
+		rangeAggregate.setPrefix(1245);
+		rangeAggregate.setQuantityRangeMcduPrefix(0);
+		rangeAggregate.setQuantityRangeStfc(0);
+		rangeAggregate.setResult(Boolean.FALSE);
+        Mockito.when(mcduPrefixRepository.getQuantityRangeByGroupCnPrefix()).thenReturn(Flux.just(rangeAggregate));
+        StepVerifier.create(service.getQuantityRangeByGroupCnPrefix()).consumeNextWith(result -> {
+            Assertions.assertThat(result.getCn()).isEqualTo(rangeAggregate.getCn());
+            Assertions.assertThat(result.getPrefix()).isEqualTo(rangeAggregate.getPrefix());
+            Assertions.assertThat(result.getMessage()).isEqualTo(GilVariables.DIVERGENT_QUANTITY_BETWEEN_RANGE_MCDU_PREFIX_AND_STFS);
+          }).expectComplete().verify();
+	}
+	
+	@Test
+	void getQuantityRangeByGroupCnPrefixWithNotExistingReturn() {
+		RangeAggregateResult rangeAggregate = new RangeAggregateResult();
+		rangeAggregate.setCn(11);
+		rangeAggregate.setPrefix(1245);
+		rangeAggregate.setQuantityRangeMcduPrefix(0);
+		rangeAggregate.setQuantityRangeStfc(0);
+		rangeAggregate.setResult(Boolean.TRUE);
+        Mockito.when(mcduPrefixRepository.getQuantityRangeByGroupCnPrefix()).thenReturn(Flux.just(rangeAggregate));
+        Assertions.assertThat(Objects.isNull(service.getQuantityRangeByGroupCnPrefix())).isFalse();
+	}
+	
+	@Test
+	void getStfcNotExistsInMcdPrefixWithExistingReturn() {
+		RangeAggregateResult rangeAggregate = new RangeAggregateResult();
+		rangeAggregate.setCn(11);
+		rangeAggregate.setPrefix(1245);
+		rangeAggregate.setQuantityRangeMcduPrefix(0);
+		rangeAggregate.setQuantityRangeStfc(0);
+		rangeAggregate.setResult(Boolean.FALSE);
+        Mockito.when(stfcRepository.getStfcNotExistsInMcdPrefix()).thenReturn(Flux.just(rangeAggregate));
+        StepVerifier.create(service.getStfcNotExistsInMcdPrefix()).consumeNextWith(result -> {
+            Assertions.assertThat(result.getCn()).isEqualTo(rangeAggregate.getCn());
+            Assertions.assertThat(result.getPrefix()).isEqualTo(rangeAggregate.getPrefix());
+            Assertions.assertThat(result.getMessage()).isEqualTo(GilVariables.EXISTING_RANGE_IN_STFC_AND_NOT_EXIST_IN_MCDU_PREFIX);
+          }).expectComplete().verify();
+	}
+	
+	@Test
+	void getStfcNotExistsInMcdPrefixWithNotExistingReturn() {
+		RangeAggregateResult rangeAggregate = new RangeAggregateResult();
+		rangeAggregate.setCn(11);
+		rangeAggregate.setPrefix(1245);
+		rangeAggregate.setQuantityRangeMcduPrefix(0);
+		rangeAggregate.setQuantityRangeStfc(0);
+		rangeAggregate.setResult(Boolean.TRUE);
+        Mockito.when(stfcRepository.getStfcNotExistsInMcdPrefix()).thenReturn(Flux.just(rangeAggregate));
+        Assertions.assertThat(Objects.isNull(service.getStfcNotExistsInMcdPrefix())).isFalse();
+	}
+	
+	@Test
+	void getMcdPrefixNotExistsInStfcWithExistingReturn() {
+		RangeAggregateResult rangeAggregate = new RangeAggregateResult();
+		rangeAggregate.setCn(11);
+		rangeAggregate.setPrefix(1245);
+		rangeAggregate.setQuantityRangeMcduPrefix(0);
+		rangeAggregate.setQuantityRangeStfc(0);
+		rangeAggregate.setResult(Boolean.FALSE);
+        Mockito.when(mcduPrefixRepository.getMcdPrefixNotExistsInStfc()).thenReturn(Flux.just(rangeAggregate));
+        StepVerifier.create(service.getMcdPrefixNotExistsInStfc()).consumeNextWith(result -> {
+            Assertions.assertThat(result.getCn()).isEqualTo(rangeAggregate.getCn());
+            Assertions.assertThat(result.getPrefix()).isEqualTo(rangeAggregate.getPrefix());
+            Assertions.assertThat(result.getMessage()).isEqualTo(GilVariables.EXISTING_RANGE_IN_MCDU_PREFIX_AND_NOT_EXIST_IN_STFC);
+          }).expectComplete().verify();
+	}
+	
+	@Test
+	void getMcdPrefixNotExistsInStfcWithNotExistingReturn() {
+		RangeAggregateResult rangeAggregate = new RangeAggregateResult();
+		rangeAggregate.setCn(11);
+		rangeAggregate.setPrefix(1245);
+		rangeAggregate.setQuantityRangeMcduPrefix(0);
+		rangeAggregate.setQuantityRangeStfc(0);
+		rangeAggregate.setResult(Boolean.TRUE);
+        Mockito.when(mcduPrefixRepository.getMcdPrefixNotExistsInStfc()).thenReturn(Flux.just(rangeAggregate));
+        Assertions.assertThat(Objects.isNull(service.getMcdPrefixNotExistsInStfc())).isFalse();
+	}
+	
+	
+	
+}
