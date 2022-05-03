@@ -1,4 +1,4 @@
-package net.oi.gil.data.service;
+package  com.arthuro.data.service;
 
 import java.time.Duration;
 import java.util.ArrayList;
