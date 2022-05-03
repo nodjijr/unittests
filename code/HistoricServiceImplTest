@@ -13,15 +13,6 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
-import net.oi.gil.common.domain.AcquisitionType;
-import net.oi.gil.common.domain.GilVariables;
-import net.oi.gil.common.domain.historic.VoipNumberHistoric;
-import net.oi.gil.common.exception.ErrorCode;
-import net.oi.gil.common.payload.ReservedNumberReportList;
-import net.oi.gil.common.payload.StringMap;
-import net.oi.gil.common.request.Operation;
-import net.oi.gil.common.response.DataResponse;
-import net.oi.gil.data.repository.voiphistoric.VoipHistoricRepository;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 
