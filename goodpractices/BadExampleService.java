@@ -56,62 +56,48 @@ public class BadExampleService {
 
    // ... classe original com 1146 linhas
    
-  public Mono<DataResponse> load(List<NewVoipRange> nvrList) {
-    // @formatter:off
-    return Flux.fromIterable(nvrList)
-        .flatMap(nvr -> {
-          return repository.existsByCnAndPrefixAndIntersectsRange(nvr.getCn(), nvr.getPrefix(), nvr.getStart(), nvr.getEnd())
-              .doOnSuccess(exists -> log.info("Registro {}", (exists ? "existe" : "nao existe")))
-              .flatMap(exists -> {
-                if (exists) {
-                  return Mono.just(new DataResponse(ErrorCode.ERR_RANGE_EXISTS, ErrorCode.ERR_RANGE_EXISTS.getMessage(), null));
-                } else {
-                  return stfcRepository.countByCnAndPrefixAndIntersectsRange(nvr.getCn(), nvr.getPrefix(), nvr.getStart(), nvr.getEnd())
-                      .doOnSuccess(result -> log.info("Registro count stfc: {}", result))
-                      .flatMap(result -> {
-                        if (result > 1){
-                          return Mono.just(new DataResponse(ErrorCode.ERR_RANGE_INTERSECT, ErrorCode.ERR_RANGE_INTERSECT.getMessage(), null));
-                        } else if (result == 0) {
-                          return Mono.just(new DataResponse(ErrorCode.ERR_RANGE_NOT_EXIST, ErrorCode.ERR_RANGE_NOT_EXIST.getMessage(), null));
-                        } else {
-                          return ufCnRepository.existsByCn(nvr.getCn())
-                          .doOnSuccess(existCn -> log.info("Registro cn {}", (exists ? "existe" : "nao existe")))
-                          .flatMap(existCn -> {
-                            if(existCn) {
-                               VoipRangeV1 vr = new VoipRangeV1(nvr.getState(), new Date(), nvr.getCnl(), nvr.getCn(), 
-                                  nvr.getPrefix(), nvr.getStart(), nvr.getEnd(), nvr.getAvailabilityDate());
-//                              vr.setState(nvr.getState());
-//                              vr.setCnl(nvr.getCnl());
-//                              vr.setCn(nvr.getCn());
-//                              vr.setPrefix(nvr.getPrefix());
-//                              vr.setStart(nvr.getStart());
-//                              vr.setEnd(nvr.getEnd());
-//                              vr.setAvailableDate(nvr.getAvailabilityDate());
-//                              vr.initAllocations();
-                               
-                              vr.setType(ResourceObjectType.VOIP_RANGE);
-                              return mcduPrefixRepository.countByCnAndPrefixAndIntersectsRange(vr.getCn(), vr.getPrefix(), vr.getStart(), vr.getEnd())
-                                  .doOnSuccess(resultMcduPrefix -> log.info("Registro count mcduPrefix: {}", resultMcduPrefix))
-                                  .flatMap(resultMcduPrefix -> {
-                                    if (resultMcduPrefix == 0){
-                                      return Mono.just(new DataResponse(ErrorCode.ERR_RANGE_INTERSECT, ErrorCode.ERR_RANGE_NOT_EXIST_MCDU_PREFIX.getMessage(), null));
-                                    } else {
-                                      return repository.save(vr)
-                                          .flatMap(vr2 -> Mono.just(new DataResponse(ErrorCode.SUCCESS, ErrorCode.SUCCESS.getMessage(), null)));
-                                    }
-                                  });
-                            } else {
-                              return Mono.just(new DataResponse(ErrorCode.ERR_CN_NOT_EXIST, ErrorCode.ERR_CN_NOT_EXIST.getMessage(), null));
-                            }
-                          });
-                        }
-                      });
-                }
-              });
-        })
-        .collectList()
-        .map(el -> mergeLoadResponse(el));
-    // @formatter:on
-  }
+  public Mono<DataResponse> donate(Integer cn, Integer prefix, Integer number, String eotCode, String responsibleUser) {
+	  // @formatter:off
+	  String paddedPrefix = StringUtils.leftPad(prefix.toString(), 4, '0');
+	  String paddedNumber = StringUtils.leftPad(number.toString(), 4, '0');
+	  final var note = "O numero foi portado para outra operadora";
+	  var phoneNumber = paddedPrefix.concat(paddedNumber);
+	  
+	  return repository.findNumberInstalledByCnAndPrefixAndNumber(cn, prefix, number)
+	      .doOnSuccess(vn -> log.info("Numero {}{}{} encontrado", vn.getCn(), vn.getNumber(), vn.getPrefix()))
+	      .flatMap(vn -> {
+	        return repository.lockObject(vn.getId())
+	            .doOnSuccess(vb -> log.info("Optimistic Lock obtido para o objeto {}", vb.getId()))
+	            .flatMap(vb -> {
+	              VoipNumberV1 vn1 = (VoipNumberV1) vb;
+	              PortabilityDonatorHistoric portabilityHistoric = new PortabilityDonatorHistoric(vn.getCn(), vn.getCnl(), 
+	            		  vn.getPrefix(),  vn.getNumber(), phoneNumber, responsibleUser, eotCode, note, new Date());
+	             
+	              String parentId = vn1.getParent();
+	              if ((parentId == null) || (parentId.isEmpty())) {
+	                log.error("O numero nao possui range associado");
+	                return Mono.error(new UndefinedParentException());
+	              }
+	              
+	              return repository.lockObject(parentId)
+	                  .doOnSuccess(vb1 -> log.info("Optimistic Lock obtido para o objeto {}", vb1.getId()))
+	                  .flatMap(vb1 -> {
+	                    VoipPair vp = VoipOperations.changeState((VoipRangeV1) vb1, vn1, ResourceState.DONATED, 
+	                    		null);       
+
+	                    return portabilityHistRepository.save(portabilityHistoric)
+	                        .doOnSuccess(pth -> log.info("Atualizacao de historico concluida: {}", portabilityHistoric))
+	                        .then(repository.save(vp.getVr()))
+	                        .doOnSuccess(vr -> log.info("Atualizacao de range concluida: {}", vp.getVr()))
+	                        .then(repository.save(vp.getVn()))
+	                        .doOnSuccess(v -> log.info("Atualizacao de numero concluida: {}", vp.getVn()))
+	                        .thenReturn(new DataResponse(ErrorCode.SUCCESS, ErrorCode.SUCCESS.getMessage(),
+	                            new Resource(ResourceType.VOIP, vp.getVn())));
+	                  });
+	            });
+	      });
+	  // @formatter:on
+	}
+
   //...
 }
