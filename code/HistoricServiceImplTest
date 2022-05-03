@@ -1,0 +1,134 @@
+package com.arthuro.data.service.voip.historic;
+
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+
+import org.assertj.core.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentMatchers;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.Mockito;
+import org.mockito.MockitoAnnotations;
+
+import net.oi.gil.common.domain.AcquisitionType;
+import net.oi.gil.common.domain.GilVariables;
+import net.oi.gil.common.domain.historic.VoipNumberHistoric;
+import net.oi.gil.common.exception.ErrorCode;
+import net.oi.gil.common.payload.ReservedNumberReportList;
+import net.oi.gil.common.payload.StringMap;
+import net.oi.gil.common.request.Operation;
+import net.oi.gil.common.response.DataResponse;
+import net.oi.gil.data.repository.voiphistoric.VoipHistoricRepository;
+import reactor.core.publisher.Flux;
+import reactor.test.StepVerifier;
+
+class HistoricServiceImplTest {
+
+	@InjectMocks
+	private HistoricServiceImp service;
+	@Mock
+	private HistoricRepository voipHistoricRepository;
+
+	@BeforeEach
+	void setUp() {
+		MockitoAnnotations.openMocks(this);
+	}
+
+	@Test /** Teste do relatorio de numeros reservados (RNR) **/
+	void findReservedNumberReport() {
+		StringMap stringMap = new StringMap();
+		stringMap.addEntry("limit", "5");
+		stringMap.addEntry("page", "1");
+		Mockito.when(
+				voipHistoricRepository.findByUfAndLocalityNameAndRequisitionDate(
+						ArgumentMatchers.any())).thenReturn(Flux.just(new VoipNumberHistoric()));
+
+		StepVerifier.create(service.findReservedNumberReport(stringMap)).consumeNextWith(r -> {
+			Assertions.assertThat(ErrorCode.SUCCESS).isEqualTo(r.getCode());
+			Assertions.assertThat("1 objeto retornado").isEqualTo(r.getMessage());
+		}).expectComplete().verify();
+	}	
+
+	@Test /**(RNR) **/
+	void findPageNumber01WithLimit05TestOkRNR() {
+		Integer page = 1 -1;
+		Integer limit = 5;
+		List<VoipNumberHistoric> list = service.findReservedNumberReport(createListRNR(), page, limit);
+		Assertions.assertThat(limit).isEqualTo(list.size());
+		Assertions.assertThat(36251001).isEqualTo(list.get(0).getPhoneNumber());
+		Assertions.assertThat(36251002).isEqualTo(list.get(1).getPhoneNumber());
+		Assertions.assertThat(36251003).isEqualTo(list.get(2).getPhoneNumber());
+		Assertions.assertThat(36251004).isEqualTo(list.get(3).getPhoneNumber());
+		Assertions.assertThat(36251005).isEqualTo(list.get(4).getPhoneNumber());
+	}
+
+	@Test /**(RNR) **/
+	void findPageNumber02WithLimit05TestOkRNR() {
+		Integer page = 2 -1;
+		Integer limit = 5;
+		List<VoipNumberHistoric> list = service.findReservedNumberReport(createListRNR(), page, limit);
+		Assertions.assertThat(limit).isEqualTo(list.size());
+		Assertions.assertThat(36251006).isEqualTo(list.get(0).getPhoneNumber());
+		Assertions.assertThat(36251007).isEqualTo(list.get(1).getPhoneNumber());
+		Assertions.assertThat(36251008).isEqualTo(list.get(2).getPhoneNumber());
+		Assertions.assertThat(36251009).isEqualTo(list.get(3).getPhoneNumber());
+		Assertions.assertThat(36251010).isEqualTo(list.get(4).getPhoneNumber());
+	}
+
+	@Test /**(RNR) **/
+	void findPageNumber03WithLimit05TestOkRNR() {
+		Integer page = 3 -1;
+		Integer limit = 5;
+		List<VoipNumberHistoric> list = service.findReservedNumberReport(createListRNR(), page, limit);
+		Assertions.assertThat(3).isEqualTo(list.size());
+		Assertions.assertThat(36251011).isEqualTo(list.get(0).getPhoneNumber());
+		Assertions.assertThat(36251012).isEqualTo(list.get(1).getPhoneNumber());
+		Assertions.assertThat(36251013).isEqualTo(list.get(2).getPhoneNumber());
+	}
+
+	@Test /**(RNR) **/
+	void createResponseTestOkRNR() {
+		Integer totalRecords = 15;
+		DataResponse response = service.createResponseReservedNumberReport(createListRNR(), totalRecords);
+		ReservedNumberReportList items = (ReservedNumberReportList) response.getPayload();
+		Assertions.assertThat(ErrorCode.SUCCESS).isEqualTo(response.getCode());
+		Assertions.assertThat("13 objetos retornados").isEqualTo(response.getMessage());
+		Assertions.assertThat(totalRecords).isEqualTo(items.getTotalRecords());
+	}
+
+	/**(RNR) **/
+	private List<VoipNumberHistoric> createListRNR() {
+		List<VoipNumberHistoric> list = new ArrayList<>();
+		list.add(new VoipNumberHistoric("asfd98g89hg87", Operation.RESERVE, 61, 12345, 3625, 1001, 36251001, GilVariables.CURRENT_USER,
+				"Disponível", "Reservado", "voip-number", "Brasília", "DF", AcquisitionType.ACQUISITION_NORMAL, new Date(), new Date()));
+		list.add(new VoipNumberHistoric("asfd98g89hg87", Operation.RESERVE, 61, 12345, 3625, 1002, 36251002, GilVariables.CURRENT_USER,
+				"Disponível", "Reservado", "voip-number", "Brasília", "DF", AcquisitionType.ACQUISITION_NORMAL, new Date(), new Date()));
+		list.add(new VoipNumberHistoric("asfd98g89hg87", Operation.RESERVE, 61, 12345, 3625, 1003, 36251003, GilVariables.CURRENT_USER,
+				"Disponível", "Reservado", "voip-number", "Brasília", "DF", AcquisitionType.ACQUISITION_NORMAL, new Date(), new Date()));
+		list.add(new VoipNumberHistoric("asfd98g89hg87", Operation.RESERVE, 61, 12345, 3625, 1004, 36251004, GilVariables.CURRENT_USER,
+				"Disponível", "Reservado", "voip-number", "Brasília", "DF", AcquisitionType.ACQUISITION_NORMAL, new Date(), new Date()));
+		list.add(new VoipNumberHistoric("asfd98g89hg87", Operation.RESERVE, 61, 12345, 3625, 1005, 36251005, GilVariables.CURRENT_USER,
+				"Disponível", "Reservado", "voip-number", "Brasília", "DF", AcquisitionType.ACQUISITION_NORMAL, new Date(), new Date()));
+		list.add(new VoipNumberHistoric("asfd98g89hg87", Operation.RESERVE, 61, 12345, 3625, 1006, 36251006, GilVariables.CURRENT_USER,
+				"Disponível", "Reservado", "voip-number", "Brasília", "DF", AcquisitionType.ACQUISITION_NORMAL, new Date(), new Date()));
+		list.add(new VoipNumberHistoric("asfd98g89hg87", Operation.RESERVE, 61, 12345, 3625, 1007, 36251007, GilVariables.CURRENT_USER,
+				"Disponível", "Reservado", "voip-number", "Brasília", "DF", AcquisitionType.ACQUISITION_NORMAL, new Date(), new Date()));
+		list.add(new VoipNumberHistoric("asfd98g89hg87", Operation.RESERVE, 61, 12345, 3625, 1008, 36251008, GilVariables.CURRENT_USER,
+				"Disponível", "Reservado", "voip-number", "Brasília", "DF", AcquisitionType.ACQUISITION_NORMAL, new Date(), new Date()));
+		list.add(new VoipNumberHistoric("asfd98g89hg87", Operation.RESERVE, 61, 12345, 3625, 1009, 36251009, GilVariables.CURRENT_USER,
+				"Disponível", "Reservado", "voip-number", "Brasília", "DF", AcquisitionType.ACQUISITION_NORMAL, new Date(), new Date()));
+		list.add(new VoipNumberHistoric("asfd98g89hg87", Operation.RESERVE, 61, 12345, 3625, 1010, 36251010, GilVariables.CURRENT_USER,
+				"Disponível", "Reservado", "voip-number", "Brasília", "DF", AcquisitionType.ACQUISITION_NORMAL, new Date(), new Date()));
+		list.add(new VoipNumberHistoric("asfd98g89hg87", Operation.RESERVE, 61, 12345, 3625, 1011, 36251011, GilVariables.CURRENT_USER,
+				"Disponível", "Reservado", "voip-number", "Brasília", "DF", AcquisitionType.ACQUISITION_NORMAL, new Date(), new Date()));
+		list.add(new VoipNumberHistoric("asfd98g89hg87", Operation.RESERVE, 61, 12345, 3625, 1012, 36251012, GilVariables.CURRENT_USER,
+				"Disponível", "Reservado", "voip-number", "Brasília", "DF", AcquisitionType.ACQUISITION_NORMAL, new Date(), new Date()));
+		list.add(new VoipNumberHistoric("asfd98g89hg87", Operation.RESERVE, 61, 12345, 3625, 1013, 36251013, GilVariables.CURRENT_USER,
+				"Disponível", "Reservado", "voip-number", "Brasília", "DF", AcquisitionType.ACQUISITION_NORMAL, new Date(), new Date()));
+		return list;
+	}
+
+}
