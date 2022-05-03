@@ -1,4 +1,4 @@
-package net.oi.gil.data;
+package  com.arthuro.data;
 
 import java.util.Date;
 import java.util.HashMap;
@@ -16,43 +16,6 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
-import net.oi.gil.common.domain.Resource;
-import net.oi.gil.common.domain.ResourceState;
-import net.oi.gil.common.domain.ResourceType;
-import net.oi.gil.common.domain.historic.PortabilityDonatorHistoric;
-import net.oi.gil.common.domain.mcduprefix.McduPrefix;
-import net.oi.gil.common.domain.mcduprefix.McduPrefixRequest;
-import net.oi.gil.common.domain.voip.VoipNumberV1;
-import net.oi.gil.common.domain.voip.eot.EotCode;
-import net.oi.gil.common.dtos.ExpireDto;
-import net.oi.gil.common.dtos.InstallDto;
-import net.oi.gil.common.dtos.UninstallDto;
-import net.oi.gil.common.dtos.UnreserveDto;
-import net.oi.gil.common.dtos.VoipBaseDto;
-import net.oi.gil.common.exception.ErrorCode;
-import net.oi.gil.common.exception.HandleException;
-import net.oi.gil.common.payload.EotCodeList;
-import net.oi.gil.common.payload.McduPrefixList;
-import net.oi.gil.common.payload.PortabilityDonatorHistoricList;
-import net.oi.gil.common.payload.StringMap;
-import net.oi.gil.common.request.Request;
-import net.oi.gil.common.request.StringMapRequestBuilder;
-import net.oi.gil.common.response.DataResponse;
-import net.oi.gil.common.response.Response;
-import net.oi.gil.data.api.VoipController;
-import net.oi.gil.data.service.eot.EotService;
-import net.oi.gil.data.service.localityanatel.LocalityAnatelService;
-import net.oi.gil.data.service.mcduprefix.McduPrefixService;
-import net.oi.gil.data.service.mcduprefix.historic.McduPrefixHistoricService;
-import net.oi.gil.data.service.message.MessageService;
-import net.oi.gil.data.service.operator.OperatorService;
-import net.oi.gil.data.service.stfc.StfcService;
-import net.oi.gil.data.service.ufcn.UfCnService;
-import net.oi.gil.data.service.voip.VoipService;
-import net.oi.gil.data.service.voip.historic.VoipHistoricService;
-import net.oi.gil.data.service.voip.portabilility.PortabilityDonatorHistoricService;
-import net.oi.gil.data.service.voip.portabilility.PortabilityHistoricService;
-import net.oi.gil.data.service.voip.range.deletion.historic.VoipRangeDeletionHistoricService;
 import reactor.core.publisher.Mono;
 
 @WebFluxTest(controllers = VoipController.class)
