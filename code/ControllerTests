@@ -1,0 +1,581 @@
+package net.oi.gil.data;
+
+import java.util.Date;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.assertj.core.api.Assertions;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentMatchers;
+import org.mockito.Mockito;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.reactive.server.WebTestClient;
+
+import net.oi.gil.common.domain.Resource;
+import net.oi.gil.common.domain.ResourceState;
+import net.oi.gil.common.domain.ResourceType;
+import net.oi.gil.common.domain.historic.PortabilityDonatorHistoric;
+import net.oi.gil.common.domain.mcduprefix.McduPrefix;
+import net.oi.gil.common.domain.mcduprefix.McduPrefixRequest;
+import net.oi.gil.common.domain.voip.VoipNumberV1;
+import net.oi.gil.common.domain.voip.eot.EotCode;
+import net.oi.gil.common.dtos.ExpireDto;
+import net.oi.gil.common.dtos.InstallDto;
+import net.oi.gil.common.dtos.UninstallDto;
+import net.oi.gil.common.dtos.UnreserveDto;
+import net.oi.gil.common.dtos.VoipBaseDto;
+import net.oi.gil.common.exception.ErrorCode;
+import net.oi.gil.common.exception.HandleException;
+import net.oi.gil.common.payload.EotCodeList;
+import net.oi.gil.common.payload.McduPrefixList;
+import net.oi.gil.common.payload.PortabilityDonatorHistoricList;
+import net.oi.gil.common.payload.StringMap;
+import net.oi.gil.common.request.Request;
+import net.oi.gil.common.request.StringMapRequestBuilder;
+import net.oi.gil.common.response.DataResponse;
+import net.oi.gil.common.response.Response;
+import net.oi.gil.data.api.VoipController;
+import net.oi.gil.data.service.eot.EotService;
+import net.oi.gil.data.service.localityanatel.LocalityAnatelService;
+import net.oi.gil.data.service.mcduprefix.McduPrefixService;
+import net.oi.gil.data.service.mcduprefix.historic.McduPrefixHistoricService;
+import net.oi.gil.data.service.message.MessageService;
+import net.oi.gil.data.service.operator.OperatorService;
+import net.oi.gil.data.service.stfc.StfcService;
+import net.oi.gil.data.service.ufcn.UfCnService;
+import net.oi.gil.data.service.voip.VoipService;
+import net.oi.gil.data.service.voip.historic.VoipHistoricService;
+import net.oi.gil.data.service.voip.portabilility.PortabilityDonatorHistoricService;
+import net.oi.gil.data.service.voip.portabilility.PortabilityHistoricService;
+import net.oi.gil.data.service.voip.range.deletion.historic.VoipRangeDeletionHistoricService;
+import reactor.core.publisher.Mono;
+
+@WebFluxTest(controllers = VoipController.class)
+class ControllerTests {
+
+	@MockBean
+	private VoipService service;
+  @MockBean
+	private StfcService stfcService;
+  @MockBean
+	private EotService eotService;
+  @MockBean
+	private McduPrefixService mcduPrefixService;
+  @MockBean
+	private UfCnService ufCnService;
+  @MockBean
+	private PortabilityDonatorHistoricService portabilityService;
+  @MockBean
+	private VoipHistoricService voipHistoricService;
+  @MockBean
+	private VoipRangeDeletionHistoricService voipRangeDeletionHistoricService;
+  @MockBean
+	private MessageService messageService;
+  @MockBean
+	private OperatorService operatorService;
+  @MockBean
+	private HandleException handleException;
+  @MockBean
+	private McduPrefixHistoricService mcduPrefixHistoricService;
+  @MockBean
+	private PortabilityHistoricService portabilityHistoricService;
+  @MockBean
+	private LocalityAnatelService  localityAnatelService;  
+  @Autowired
+  private WebTestClient webClient;
+
+  @Test
+  void test_doGet_success2() {
+    Map<String, String> requestMap = new LinkedHashMap<>();
+    requestMap.put("type", "voip");
+    requestMap.put("operation", "eot-find");
+    requestMap.put("eot", "001");
+
+    EotCode eotCode =
+        new EotCode("001", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "1", "2", "3", "4", "5", "6", "7", "8");
+
+    DataResponse response =
+        new DataResponse(ErrorCode.SUCCESS, ErrorCode.SUCCESS.getMessage(), EotCodeList.from(List.of(eotCode)));
+    Mockito.when(eotService.find(ArgumentMatchers.any(Request.class))).thenReturn(Mono.just(response));
+
+    webClient.get().uri(uriBuilder -> {
+      return uriBuilder.path("/data/voip/v1")
+          .queryParam("type", requestMap.get("type"))
+          .queryParam("operation", requestMap.get("operation"))
+          .build();
+    }).accept(MediaType.APPLICATION_JSON).exchange().expectStatus().isOk().expectBody().json(response.toString());
+  }
+
+@Test
+  void test_doGet_success4() {
+    Map<String, String> requestMap = new HashMap<>();
+    requestMap.put("type", "voip");
+    requestMap.put("operation", "eot-find");
+    requestMap.put("eot", "001");
+
+    EotCode eotCode =
+        new EotCode("001", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "1", "2", "3", "4", "5", "6", "7", "8");
+    DataResponse response =
+        new DataResponse(ErrorCode.SUCCESS, ErrorCode.SUCCESS.getMessage(), EotCodeList.from(List.of(eotCode)));
+    Mockito.when(eotService.find(ArgumentMatchers.any(Request.class))).thenReturn(Mono.just(response));
+
+    webClient.get().uri(uriBuilder -> {
+      return uriBuilder.path("/data/voip/v1")
+          .queryParam("type", requestMap.get("type"))
+          .queryParam("operation", requestMap.get("operation"))
+          .build();
+    }).accept(MediaType.APPLICATION_JSON).exchange().expectStatus().isOk().expectBody().json(response.toString());
+  }
+
+  @Test
+  void test_doGet_errorInvalidResourceType() {
+    Map<String, String> requestMap = new LinkedHashMap<>();
+    requestMap.put("type", "naoexiste");
+    requestMap.put("operation", "find");
+    requestMap.put("cnl", "1");
+
+    DataResponse expected =
+        new DataResponse(ErrorCode.ERR_INVALID_RESOURCE_TYPE, ErrorCode.ERR_INVALID_RESOURCE_TYPE.getMessage(),
+            StringMap.from(requestMap));
+
+    webClient.get().uri(uriBuilder -> {
+      return uriBuilder.path("/data/voip/v1")
+          .queryParam("type", requestMap.get("type"))
+          .queryParam("operation", requestMap.get("operation"))
+          .queryParam("cnl", requestMap.get("cnl"))
+          .build();
+    }).accept(MediaType.APPLICATION_JSON).exchange().expectStatus().isOk().expectBody(Response.class).value(r -> {
+      Assertions.assertThat(r.getCode()).isEqualTo(expected.getCode());
+      Assertions.assertThat(r.getMessage()).isEqualTo(expected.getMessage());
+      Assertions.assertThat(r.getPayload().toString()).hasToString(expected.getPayload().toString());
+    });
+  }
+
+  @Test
+  void test_doGet_errorInconsistentOperation() {
+    Map<String, String> requestMap = new LinkedHashMap<>();
+    requestMap.put("type", "voip");
+    requestMap.put("operation", "install");
+    requestMap.put("cnl", "1");
+
+    Request request = null;
+    try {
+      request = StringMapRequestBuilder.fromMap(requestMap).build();
+    } catch (Exception e) {
+      Assertions.assertThat(Boolean.FALSE).isTrue();
+    }
+
+    DataResponse expected =
+        new DataResponse(ErrorCode.ERR_INCONSISTENT_OPERATION, ErrorCode.ERR_INCONSISTENT_OPERATION.getMessage(), request);
+
+    webClient.get().uri(uriBuilder -> {
+      return uriBuilder.path("/data/voip/v1")
+          .queryParam("type", requestMap.get("type"))
+          .queryParam("operation", requestMap.get("operation"))
+          .queryParam("cnl", requestMap.get("cnl"))
+          .build();
+    }).accept(MediaType.APPLICATION_JSON).exchange().expectStatus().isOk().expectBody(Response.class).value(r -> {
+      Assertions.assertThat(r.getCode()).isEqualTo(expected.getCode());
+      Assertions.assertThat(r.getMessage()).isEqualTo(expected.getMessage());
+      Assertions.assertThat(r.getPayload().toString()).hasToString(expected.getPayload().toString());
+    });
+  }
+
+  @Test
+  void test_doPatch_success() {
+    Map<String, String> requestMap = new HashMap<>();
+    requestMap.put("type", "voip");
+    requestMap.put("operation", "install");
+    requestMap.put("cnl", "1");
+
+    Request request = null;
+    try {
+      request = StringMapRequestBuilder.fromMap(requestMap).build();
+    } catch (Exception e) {
+      Assertions.assertThat(Boolean.FALSE).isTrue();
+    }
+
+    VoipNumberV1 number = new VoipNumberV1(ResourceState.INSTALLED, new Date(), 1, 31, 1234, 5678, null);
+    Resource resource = new Resource(ResourceType.VOIP, number);
+    DataResponse response = new DataResponse(ErrorCode.SUCCESS, ErrorCode.SUCCESS.getMessage(), resource);
+    Mockito.when(service.install(ArgumentMatchers.any(InstallDto.class))).thenReturn(Mono.just(response));
+
+    webClient.patch()
+        .uri("/data/voip/v1")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(request)
+        .accept(MediaType.APPLICATION_JSON)
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .json(response.toString());
+  }
+
+  @Test
+  void test_doPatch_success2() {
+    Map<String, String> requestMap = new HashMap<>();
+    requestMap.put("type", "voip");
+    requestMap.put("operation", "uninstall");
+    requestMap.put("cnl", "1");
+    requestMap.put("cn", "31");
+    requestMap.put("prefix", "1234");
+    requestMap.put("number", "5678");
+
+    Request request = null;
+    try {
+      request = StringMapRequestBuilder.fromMap(requestMap).build();
+    } catch (Exception e) {
+      Assertions.assertThat(Boolean.FALSE).isTrue();
+    }
+
+    VoipNumberV1 number = new VoipNumberV1(ResourceState.AVAILABLE, new Date(), 1, 31, 1234, 5678, null);
+    Resource resource = new Resource(ResourceType.VOIP, number);
+    DataResponse response = new DataResponse(ErrorCode.SUCCESS, ErrorCode.SUCCESS.getMessage(), resource);
+    //Mockito.when(service.uninstall(ArgumentMatchers.any().thenReturn(Mono.just(response));
+    Mockito.when(service.uninstall(ArgumentMatchers.any(UninstallDto.class))).thenReturn(Mono.just(response));
+
+
+    webClient.patch()
+        .uri("/data/voip/v1")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(request)
+        .accept(MediaType.APPLICATION_JSON)
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .json(response.toString());
+  }
+
+  @Test
+  void test_doPatch_success3() {
+    Map<String, String> requestMap = new HashMap<>();
+    requestMap.put("type", "voip");
+    requestMap.put("operation", "expire");
+    requestMap.put("state", "reserved");
+    requestMap.put("days", "180");
+
+    Request request = null;
+    try {
+      request = StringMapRequestBuilder.fromMap(requestMap).build();
+    } catch (Exception e) {
+      Assertions.assertThat(Boolean.FALSE).isTrue();
+    }
+
+    String message = "Sucesso" + System.lineSeparator() + "[1]: Sucess (1111110001)";
+
+    DataResponse response = new DataResponse(ErrorCode.SUCCESS, message, null);
+    Mockito.when(service.expire(ArgumentMatchers.any(ExpireDto.class))).thenReturn(Mono.just(response));
+
+    webClient.patch()
+        .uri("/data/voip/v1")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(request)
+        .accept(MediaType.APPLICATION_JSON)
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .json(response.toString());
+  }
+
+  @Test
+  void test_doPatch_success4() {
+    Map<String, String> requestMap = new HashMap<>();
+    requestMap.put("type", "voip");
+    requestMap.put("operation", "unreserve");
+    requestMap.put("cnl", "1");
+    requestMap.put("cn", "31");
+    requestMap.put("prefix", "1234");
+    requestMap.put("number", "5678");
+
+    Request request = null;
+    try {
+      request = StringMapRequestBuilder.fromMap(requestMap).build();
+    } catch (Exception e) {
+      Assertions.assertThat(Boolean.FALSE).isTrue();
+    }
+
+    VoipNumberV1 number = new VoipNumberV1(ResourceState.AVAILABLE, new Date(), 1, 31, 1234, 5678, null);
+    Resource resource = new Resource(ResourceType.VOIP, number);
+    DataResponse response = new DataResponse(ErrorCode.SUCCESS, ErrorCode.SUCCESS.getMessage(), resource);
+    Mockito.when(service.unreserve(ArgumentMatchers.any(UnreserveDto.class))).thenReturn(Mono.just(response));
+
+    webClient.patch()
+        .uri("/data/voip/v1")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(request)
+        .accept(MediaType.APPLICATION_JSON)
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .json(response.toString());
+  }
+
+  @Test
+  void test_doGet_success5() {
+    Map<String, String> requestMap = new HashMap<>();
+    requestMap.put("type", "voip");
+    requestMap.put("operation", "donor-portability-historic-find");
+    requestMap.put("cn", "31");
+
+    PortabilityDonatorHistoric portabilityDonatorHistoric = 
+        new PortabilityDonatorHistoric(new VoipBaseDto(31, 3, 3625, 7, "EOT1","36250007") , "Fulano",  "Observa��o", new Date());
+    DataResponse response =
+        new DataResponse(ErrorCode.SUCCESS, ErrorCode.SUCCESS.getMessage(), PortabilityDonatorHistoricList.from(List.of(portabilityDonatorHistoric),1));
+    Mockito.when(portabilityService.find(ArgumentMatchers.any(StringMap.class))).thenReturn(Mono.just(response));
+
+    webClient.get().uri(uriBuilder -> {
+      return uriBuilder.path("/data/voip/v1")
+          .queryParam("type", requestMap.get("type"))
+          .queryParam("operation", requestMap.get("operation"))
+          .queryParam("cn", requestMap.get("31"))
+          .build();
+    }).accept(MediaType.APPLICATION_JSON).exchange().expectStatus().isOk().expectBody().json(response.toString());
+  }
+
+
+  @Test
+  void test_doPatch_success6() {
+    Map<String, String> requestMap = new HashMap<>();
+    requestMap.put("type", "voip");
+    requestMap.put("operation", "quarantine-reserve-to-quarantine");
+    requestMap.put("days", "180");
+
+    Request request = null;
+    try {
+      request = StringMapRequestBuilder.fromMap(requestMap).build();
+    } catch (Exception e) {
+      Assertions.assertThat(Boolean.FALSE).isTrue();
+    }
+
+    String message = "Sucesso" + System.lineSeparator() + "[1]: Sucess (1111110001)";
+
+    DataResponse response = new DataResponse(ErrorCode.SUCCESS, message, null);
+    Mockito.when(service.quarantineReserveToQuarantine(ArgumentMatchers.any(StringMap.class))).thenReturn(Mono.just(response));
+
+    webClient.patch()
+        .uri("/data/voip/v1")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(request)
+        .accept(MediaType.APPLICATION_JSON)
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .json(response.toString());
+  }
+
+  @Test
+  void test_doPatch_errorInvalidParameter() {
+    Map<String, String> requestMap = new HashMap<>();
+    requestMap.put("type", "voip");
+    requestMap.put("operation", "install");
+    requestMap.put("cnl", "a");
+
+    Request request = null;
+    try {
+      request = StringMapRequestBuilder.fromMap(requestMap).build();
+    } catch (Exception e) {
+      Assertions.assertThat(Boolean.FALSE).isTrue();
+    }
+
+    DataResponse expected =
+        new DataResponse(ErrorCode.ERR_INVALID_PARAMETER, ErrorCode.ERR_INVALID_PARAMETER.getMessage(), request);
+
+    webClient.patch()
+        .uri("/data/voip/v1")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(request)
+        .accept(MediaType.APPLICATION_JSON)
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody(Response.class)
+        .value(r -> {
+          Assertions.assertThat(r.getCode()).isEqualTo(expected.getCode());
+          Assertions.assertThat(r.getMessage()).isEqualTo(expected.getMessage());
+          Assertions.assertThat(r.getPayload().toString()).hasToString(expected.getPayload().toString());
+        });
+  }
+
+  @Test
+  void test_doPatch_errorInvalidParameter2() {
+    Map<String, String> requestMap = new HashMap<>();
+    requestMap.put("type", "voip");
+    requestMap.put("operation", "uninstall");
+    requestMap.put("cn", "a");
+    requestMap.put("prefix", "1234");
+    requestMap.put("number", "5678");
+
+    Request request = null;
+    try {
+      request = StringMapRequestBuilder.fromMap(requestMap).build();
+    } catch (Exception e) {
+      Assertions.assertThat(Boolean.FALSE).isTrue();
+    }
+
+    DataResponse expected =
+        new DataResponse(ErrorCode.ERR_INVALID_PARAMETER, ErrorCode.ERR_INVALID_PARAMETER.getMessage(), request);
+
+    webClient.patch()
+        .uri("/data/voip/v1")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(request)
+        .accept(MediaType.APPLICATION_JSON)
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody(Response.class)
+        .value(r -> {
+          Assertions.assertThat(r.getCode()).isEqualTo(expected.getCode());
+          Assertions.assertThat(r.getMessage()).isEqualTo(expected.getMessage());
+          Assertions.assertThat(r.getPayload().toString()).hasToString(expected.getPayload().toString());
+        });
+  }
+
+  @Test
+  void test_doPatch_errorInvalidParameter3() {
+    Map<String, String> requestMap = new HashMap<>();
+    requestMap.put("type", "voip");
+    requestMap.put("operation", "uninstall");
+    requestMap.put("cn", "31");
+    requestMap.put("prefix", "abc");
+    requestMap.put("number", "5678");
+
+    Request request = null;
+    try {
+      request = StringMapRequestBuilder.fromMap(requestMap).build();
+    } catch (Exception e) {
+      Assertions.assertThat(Boolean.FALSE).isTrue();
+    }
+
+    DataResponse expected =
+        new DataResponse(ErrorCode.ERR_INVALID_PARAMETER, ErrorCode.ERR_INVALID_PARAMETER.getMessage(), request);
+
+    webClient.patch()
+        .uri("/data/voip/v1")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(request)
+        .accept(MediaType.APPLICATION_JSON)
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody(Response.class)
+        .value(r -> {
+          Assertions.assertThat(r.getCode()).isEqualTo(expected.getCode());
+          Assertions.assertThat(r.getMessage()).isEqualTo(expected.getMessage());
+          Assertions.assertThat(r.getPayload().toString()).hasToString(expected.getPayload().toString());
+        });
+  }
+
+  @Test
+  void test_doPatch_errorInvalidParameter4() {
+    Map<String, String> requestMap = new HashMap<>();
+    requestMap.put("type", "voip");
+    requestMap.put("operation", "uninstall");
+    requestMap.put("cn", "31");
+    requestMap.put("prefix", "1234");
+    requestMap.put("number", "abc");
+
+    Request request = null;
+    try {
+      request = StringMapRequestBuilder.fromMap(requestMap).build();
+    } catch (Exception e) {
+      Assertions.assertThat(Boolean.FALSE).isTrue();
+    }
+
+    DataResponse expected =
+        new DataResponse(ErrorCode.ERR_INVALID_PARAMETER, ErrorCode.ERR_INVALID_PARAMETER.getMessage(), request);
+
+    webClient.patch()
+        .uri("/data/voip/v1")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(request)
+        .accept(MediaType.APPLICATION_JSON)
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody(Response.class)
+        .value(r -> {
+          Assertions.assertThat(r.getCode()).isEqualTo(expected.getCode());
+          Assertions.assertThat(r.getMessage()).isEqualTo(expected.getMessage());
+          Assertions.assertThat(r.getPayload().toString()).hasToString(expected.getPayload().toString());
+        });
+  }
+
+  @Test
+  void test_doPatch_errorInvalidParameter5() {
+    Map<String, String> requestMap = new HashMap<>();
+    requestMap.put("type", "voip");
+    requestMap.put("operation", "expire");
+    requestMap.put("state", "reserved");
+    requestMap.put("days", "a");
+
+    Request request = null;
+    try {
+      request = StringMapRequestBuilder.fromMap(requestMap).build();
+    } catch (Exception e) {
+      Assertions.assertThat(Boolean.FALSE).isTrue();
+    }
+
+    DataResponse expected =
+        new DataResponse(ErrorCode.ERR_INVALID_PARAMETER, ErrorCode.ERR_INVALID_PARAMETER.getMessage(), request);
+
+    webClient.patch()
+        .uri("/data/voip/v1")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(request)
+        .accept(MediaType.APPLICATION_JSON)
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody(Response.class)
+        .value(r -> {
+          Assertions.assertThat(r.getCode()).isEqualTo(expected.getCode());
+          Assertions.assertThat(r.getMessage()).isEqualTo(expected.getMessage());
+          Assertions.assertThat(r.getPayload().toString()).hasToString(expected.getPayload().toString());
+        });
+  }
+
+  @Test
+  void test_doPatch_errorInconsistentOperation() {
+    Map<String, String> requestMap = new LinkedHashMap<>();
+    requestMap.put("type", "voip");
+    requestMap.put("operation", "find");
+    requestMap.put("cnl", "1");
+
+    Request request = null;
+    try {
+      request = StringMapRequestBuilder.fromMap(requestMap).build();
+    } catch (Exception e) {
+      Assertions.assertThat(Boolean.FALSE).isTrue();
+    }
+
+    DataResponse expected =
+        new DataResponse(ErrorCode.ERR_INCONSISTENT_OPERATION, ErrorCode.ERR_INCONSISTENT_OPERATION.getMessage(), request);
+
+    webClient.patch()
+        .uri("/data/voip/v1")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(request)
+        .accept(MediaType.APPLICATION_JSON)
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody(Response.class)
+        .value(r -> {
+          Assertions.assertThat(r.getCode()).isEqualTo(expected.getCode());
+          Assertions.assertThat(r.getMessage()).isEqualTo(expected.getMessage());
+          Assertions.assertThat(r.getPayload().toString()).hasToString(expected.getPayload().toString());
+        });
+  }
+
+}
